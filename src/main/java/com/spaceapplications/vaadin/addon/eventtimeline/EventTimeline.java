@@ -32,15 +32,14 @@ import com.vaadin.ui.Component;
  * EventTimeline implementation, based on original version from vaadin-timeline.
  * 
  * @author Thomas Neidhart / Space Applications Services NV/SA
+ * @author Florian Pirchner (add / remove bands)
  * @author John Ahlroos / IT Mill Oy Ltd 2010
- *         <p/>
- *         Contributors:<br/>
- *         Florian Pirchner <florian.pirchner@gmail.com> Add / remove bands
  */
 @ClientWidget(value = VEventTimelineWidget.class, loadStyle = LoadStyle.EAGER)
-@SuppressWarnings({ "serial" })
 public class EventTimeline extends AbstractComponent implements
 		EventSetChangeListener {
+
+	private static final long serialVersionUID = 6595058445231789530L;
 
 	// The style name
 	private static final String STYLENAME = "v-eventtimeline";
@@ -92,6 +91,9 @@ public class EventTimeline extends AbstractComponent implements
 
 	// Should a the page size be sent
 	private boolean sendEventBandPageSize = false;
+
+	// Should the band height be sent
+	private boolean sendBandHeight = false;
 
 	// The events to send in the next refresh
 	private Date eventsStartTime = null;
@@ -154,6 +156,9 @@ public class EventTimeline extends AbstractComponent implements
 	// The graph grid color (as CSS3 style rgba string)
 	protected String gridColor = "rgba(192,192,192,1)";
 
+	// The height of a band, -1 indicates automatic sizing
+	protected int bandHeight = -1;
+
 	// Date formats
 	protected final DateFormatInfo dateFormatInfo = new DateFormatInfo();
 
@@ -171,6 +176,8 @@ public class EventTimeline extends AbstractComponent implements
 	 * The date range changed event represents a change in the time span.
 	 */
 	public class DateRangeChangedEvent extends Component.Event {
+
+		private static final long serialVersionUID = -5424380516338748718L;
 
 		private Date startDate;
 
@@ -229,6 +236,8 @@ public class EventTimeline extends AbstractComponent implements
 	 */
 	public class EventButtonClickEvent extends Component.Event {
 
+		private static final long serialVersionUID = 1215106616175652769L;
+
 		private Object id;
 
 		/**
@@ -272,6 +281,8 @@ public class EventTimeline extends AbstractComponent implements
 	 */
 	public class BandSelectionEvent extends Component.Event {
 
+		private static final long serialVersionUID = -621449416684203285L;
+
 		private int id;
 
 		/**
@@ -313,6 +324,8 @@ public class EventTimeline extends AbstractComponent implements
 	 */
 	public class PageNavigationEvent extends Component.Event {
 
+		private static final long serialVersionUID = -5391363403702750953L;
+
 		private final int page;
 
 		/**
@@ -343,6 +356,8 @@ public class EventTimeline extends AbstractComponent implements
 	 * Describes the date formats used by the EventTimeline.
 	 */
 	public class DateFormatInfo implements Serializable {
+
+		private static final long serialVersionUID = -3103432458378549206L;
 
 		private String dateSelectDisplaySimpleDateFormat = "MMM d, y";
 		private String dateSelectEditSimpleDateFormat = "dd/MM/yyyy";
@@ -782,8 +797,18 @@ public class EventTimeline extends AbstractComponent implements
 
 		// Initialization data requested from the client side (refresh occurred)
 		if (variables.containsKey("init")) {
+
+			// also re-send all bands
+			if (!sendBands) {
+				sendBands = true;
+				for (BandInfo info : bandInfos) {
+					if (!bandsToBeAdded.contains(info)) {
+						bandsToBeAdded.add(info);
+					}
+				}
+			}
+
 			initDataFlags();
-			requestRepaint();
 		}
 
 		// The client need some events to display
@@ -813,7 +838,7 @@ public class EventTimeline extends AbstractComponent implements
 		}
 
 		// Send the data to the client
-		if (variables.containsKey("send")) {
+		if (variables.containsKey("send") || variables.containsKey("init")) {
 			requestRepaint();
 		}
 
@@ -968,6 +993,11 @@ public class EventTimeline extends AbstractComponent implements
 			sendEventBandPageSize = false;
 		}
 
+		if (sendBandHeight) {
+			target.addAttribute("bandheight", bandHeight);
+			sendBandHeight = false;
+		}
+
 		if (sendBands) {
 			if (bandsToBeRemoved.size() > 0 || bandsToBeAdded.size() > 0) {
 				BandsPainter.start(target);
@@ -1073,8 +1103,6 @@ public class EventTimeline extends AbstractComponent implements
 			eventsStartTime = minDate;
 			eventsEndTime = maxDate;
 			requestRepaint();
-
-			requestRepaint();
 		}
 
 		return result;
@@ -1100,7 +1128,6 @@ public class EventTimeline extends AbstractComponent implements
 		if (result != null) {
 			result.getProvider().removeListener(this);
 			bandInfos.remove(result);
-
 			// if the band was added previously before sending the band
 			// to the client, than remove the band again
 			if (bandsToBeAdded.contains(result)) {
@@ -1240,7 +1267,6 @@ public class EventTimeline extends AbstractComponent implements
 	public void removeListener(DateRangeListener listener) {
 		removeListener(DateRangeChangedEvent.class, listener);
 		dateRangeListenerCounter--;
-
 		if (dateRangeListenerCounter == 0) {
 			sendChangeEventAvailable = false;
 		}
@@ -1330,7 +1356,6 @@ public class EventTimeline extends AbstractComponent implements
 	public void setBrowserVisible(boolean visible) {
 		browserIsVisible = visible;
 		sendComponentVisibilities = true;
-
 		if (initDone) {
 			requestRepaint();
 		}
@@ -1354,7 +1379,6 @@ public class EventTimeline extends AbstractComponent implements
 	public void setZoomLevelsVisible(boolean visible) {
 		zoomIsVisible = visible;
 		sendComponentVisibilities = true;
-
 		if (initDone) {
 			requestRepaint();
 		}
@@ -1394,6 +1418,31 @@ public class EventTimeline extends AbstractComponent implements
 	 */
 	public String getZoomLevelsCaption() {
 		return this.zoomLevelCaption;
+	}
+
+	/**
+	 * Sets the band height. A value of -1 indicates that the bands shall use
+	 * automatic resizing to available space.
+	 * 
+	 * @param height
+	 *            the band heigth to be used
+	 * 
+	 */
+	public void setBandHeight(int height) {
+		this.bandHeight = height;
+		sendBandHeight = true;
+		if (initDone) {
+			requestRepaint();
+		}
+	}
+
+	/**
+	 * Get the configured band height
+	 * 
+	 * @return the band height
+	 */
+	public int getBandHeight() {
+		return this.bandHeight;
 	}
 
 	/**
@@ -1459,7 +1508,6 @@ public class EventTimeline extends AbstractComponent implements
 	public void setDateSelectVisible(boolean visible) {
 		dateSelectVisible = visible;
 		sendComponentVisibilities = true;
-
 		if (initDone) {
 			requestRepaint();
 		}
@@ -1488,7 +1536,6 @@ public class EventTimeline extends AbstractComponent implements
 	public void setDateSelectEnabled(boolean enabled) {
 		dateSelectEnabled = enabled;
 		sendComponentVisibilities = true;
-
 		if (initDone) {
 			requestRepaint();
 		}
@@ -1563,9 +1610,7 @@ public class EventTimeline extends AbstractComponent implements
 	 */
 	public void setEventBandPageSize(int eventBandPageSize) {
 		this.eventBandPageSize = eventBandPageSize;
-
 		sendEventBandPageSize = true;
-
 		if (initDone) {
 			requestRepaint();
 		}
@@ -1714,6 +1759,7 @@ public class EventTimeline extends AbstractComponent implements
 		sendZoomLevels = true;
 		sendUICaptions = true;
 		sendBands = true;
+		sendBandHeight = true;
 		sendEventBandPageSize = true;
 	}
 
@@ -1794,7 +1840,10 @@ public class EventTimeline extends AbstractComponent implements
 	 * Can be used to specify the captions of the band paging navigation
 	 * element.
 	 */
-	public static class PageNavigationCaptions {
+	public static class PageNavigationCaptions implements Serializable {
+
+		private static final long serialVersionUID = 7731112570587996160L;
+
 		private final String caption;
 		private final String caption_next;
 		private final String caption_previous;
@@ -1810,7 +1859,6 @@ public class EventTimeline extends AbstractComponent implements
 		 */
 		public PageNavigationCaptions(String caption, String caption_next,
 				String caption_previous) {
-			super();
 			this.caption = caption;
 			this.caption_next = caption_next;
 			this.caption_previous = caption_previous;
@@ -1846,16 +1894,18 @@ public class EventTimeline extends AbstractComponent implements
 	}
 
 	/**
-	 * Class describing the
+	 * Class providing band information.
 	 */
-	public static class BandInfo {
+	public static class BandInfo implements Serializable {
+
+		private static final long serialVersionUID = 6388755571992132307L;
+
 		private final int bandId;
 		private final TimelineEventProvider provider;
 		private String caption;
 
 		public BandInfo(int bandId, TimelineEventProvider provider,
 				String caption) {
-			super();
 			this.bandId = bandId;
 			this.provider = provider;
 			this.caption = caption;
